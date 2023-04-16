@@ -1,0 +1,8 @@
+*.o
+spracker
+*.kdev4
+*.spr
+*.vscode
+*.exe
+*.stackdump
+*.tga
