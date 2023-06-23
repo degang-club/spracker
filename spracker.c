@@ -8,7 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tga.h"
+#include <libafbeelding/color_quantization.h>
+#include <libafbeelding/format-tga.h>
 #include "spr.h"
 
 #define COORDS_TO_INDEX(x, y, width) (y * width + x)
@@ -68,93 +69,57 @@ char *substr(char *start, char *end) {
 	return sub;
 }
 
-void add_tga_to_spr(SPR *spr, TGA *tga)
+void add_tga_to_spr(SPR *spr, AFB_IMAGE *img)
 {
-	int i, palette_index;
 	int image_size = 0;
-	static int frame_count = 0;
-	uint8_t smallest_distance_index;
-	double current_squared_distance, previous_squared_distance;
+	AFB_PALETTE pal = afb_quantize_median_cut(*img, 256);
+	pal = afb_quantize_median_cut(*img, 256);
 	
-	if (frame_count == 0) {
+	if (spr->frame_count == 0) {
 		spr->frames = malloc(sizeof(spr->frames));
 	} else {
 		spr->frames = realloc(spr->frames, sizeof(spr->frames) * (spr->frame_count + 1));
 	}
 	
-	spr->frames[frame_count] = malloc(sizeof(SPR_FRAME));
+	spr->frames[spr->frame_count] = malloc(sizeof(SPR_FRAME));
 	
-	spr->frames[frame_count]->frame_group = 0;
-	spr->frames[frame_count]->origin_x = 0 - tga->imageSpec.width / 2;
-	spr->frames[frame_count]->origin_y = tga->imageSpec.height / 2;
-	spr->frames[frame_count]->width = tga->imageSpec.width;
-	spr->frames[frame_count]->height = tga->imageSpec.height;
+	spr->frames[spr->frame_count]->frame_group = 0;
+	spr->frames[spr->frame_count]->origin_x = 0 - img->width / 2;
+	spr->frames[spr->frame_count]->origin_y = img->height / 2;
+	spr->frames[spr->frame_count]->width = img->width;
+	spr->frames[spr->frame_count]->height = img->height;
 	
 	/* Change max width and height */
-	if (spr->frames[frame_count]->width > spr->frame_max_width)
-		spr->frame_max_width = spr->frames[frame_count]->width;
+	if (spr->frames[spr->frame_count]->width > spr->frame_max_width)
+		spr->frame_max_width = spr->frames[spr->frame_count]->width;
 	
-	if (spr->frames[frame_count]->height > spr->frame_max_height)
-		spr->frame_max_height = spr->frames[frame_count]->height;
+	if (spr->frames[spr->frame_count]->height > spr->frame_max_height)
+		spr->frame_max_height = spr->frames[spr->frame_count]->height;
 	
-	image_size = spr->frames[frame_count]->width * spr->frames[frame_count]->height;
-	spr->frames[frame_count]->image_data = malloc(image_size);
-	
-	for (i=0; i < image_size; i++) {
-		uint8_t red = tga->colorMapData[tga->imageData[i]].red;
-		uint8_t green = tga->colorMapData[tga->imageData[i]].green;
-		uint8_t blue= tga->colorMapData[tga->imageData[i]].blue;
-		
-		/* Check if color is present in the palette */
-		for (palette_index=0; palette_index < spr->palette.palette_size; palette_index++) {
-			if (spr->palette.palette[palette_index * 3] == red && spr->palette.palette[palette_index * 3 + 1] == green && spr->palette.palette[palette_index * 3 + 2] == blue) {
-				spr->frames[frame_count]->image_data[i] = palette_index;
-				break;
-			}
-		}
-		
-		/* If color was not in palette and the palette is full, find closest match */
-		if (palette_index == 256) {
-			previous_squared_distance = DBL_MAX;
-			
-			for (palette_index=0; palette_index < spr->palette.palette_size; palette_index++) {
-				current_squared_distance =
-				pow(red - spr->palette.palette[palette_index * 3 + RED], 2)
-				+ pow(green - spr->palette.palette[palette_index * 3 + GREEN], 2)
-				+ pow(blue - spr->palette.palette[palette_index * 3 + BLUE], 2);
-				if ( current_squared_distance < previous_squared_distance) {
-					previous_squared_distance = current_squared_distance;
-					smallest_distance_index = palette_index;
-				}
-			}
-			spr->frames[frame_count]->image_data[i] = smallest_distance_index;
-		/* Add color to color pallete */
-		} else if (palette_index == spr->palette.palette_size) {
-			if (spr->palette.palette_size == 0) {
-				spr->palette.palette = malloc(3);
-			} else {
-				spr->palette.palette = realloc(spr->palette.palette,
-									  (spr->palette.palette_size + 1) * 3);
-			}
-			
-			spr->palette.palette[spr->palette.palette_size * 3 + RED] = red;
-			spr->palette.palette[spr->palette.palette_size * 3 + GREEN] = green;
-			spr->palette.palette[spr->palette.palette_size * 3 + BLUE] = blue;
-			spr->frames[frame_count]->image_data[i] = spr->palette.palette_size;
-			spr->palette.palette_size++;
-		}
+	image_size = spr->frames[spr->frame_count]->width * spr->frames[spr->frame_count]->height;
+	spr->frames[spr->frame_count]->image_data = malloc(image_size);
+
+	if (img->image_type != PALETTED) {
+		image_to_pal(img, &pal);
 	}
-	
-	/* Here we write the size after we incremented frame_count, since the size is
-	 always the current index + 1 */
-	frame_count++;
-	spr->frame_count = frame_count;
+
+	spr->palette.palette_size = img->palette.size;
+	spr->palette.palette = malloc(img->palette.size * 3);
+	for (unsigned int i = 0; i < img->palette.size; i++) {
+		spr->palette.palette[i * 3 + RED] = afb_rgba_get_r(img->palette.colors[i]);
+		spr->palette.palette[i * 3 + GREEN] = afb_rgba_get_g(img->palette.colors[i]);
+		spr->palette.palette[i * 3 + BLUE] = afb_rgba_get_b(img->palette.colors[i]);
+	}
+
+	memcpy(spr->frames[spr->frame_count]->image_data, img->image_data, image_size);
+
+	spr->frame_count++;
 }
 
 void convert_tga_to_spr(SPR *spr, char *file_path) {
-	TGA tga;
-	tga_load_file(&tga, file_path);
-	add_tga_to_spr(spr, &tga);
+	AFB_IMAGE img = afb_image_init();
+	afb_format_tga_load(&img, file_path);
+	add_tga_to_spr(spr, &img);
 }
 
 int main(int argc, char *argv[])
@@ -195,7 +160,7 @@ int main(int argc, char *argv[])
 					   SPR_SYNC_TYPE_RANDOM);
 	
 	// Find all .tga files in dir
-	n = scandir("test_files/", &namelist, NULL, pstrcmp);
+	n = scandir(dir_path, &namelist, NULL, pstrcmp);
 	if (n < 0)
 		perror("scandir");
 	else {

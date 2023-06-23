@@ -20,8 +20,8 @@ SPR spr_init(uint16_t sprite_type, uint16_t texture_format, uint16_t synchroniza
 
 int spr_update(SPR *spr)
 {
-	int i;
-	uint64_t image_size;
+	// int i;
+	// uint64_t image_size;
 
 	
 	return 0;
@@ -53,7 +53,7 @@ int spr_save_file(SPR *spr, char *path) {
 	}
 	
 	/* Write the frames */
-	for (i=0; i < spr->frame_count; i++) {
+	for (unsigned i=0; i < spr->frame_count; i++) {
 		fwrite(&spr->frames[i]->frame_group, sizeof(spr->frames[i]->frame_group), 1, f);
 		fwrite(&spr->frames[i]->origin_x, sizeof(spr->frames[i]->origin_x), 1, f);
 		fwrite(&spr->frames[i]->origin_y, sizeof(spr->frames[i]->origin_y), 1, f);
@@ -68,6 +68,6 @@ int spr_save_file(SPR *spr, char *path) {
 	return 0;
 }
 
-void spr_free(SPR *wad)
+void spr_free(SPR *spr)
 {
 }
